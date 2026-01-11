@@ -19,8 +19,15 @@
       <div class="pp-card">
         <div class="pp-row">
           <div class="pp-col">
-            <label class="inputLabel" for="ppPlaylistId">Playlist ID</label>
-            <input id="ppPlaylistId" type="text" is="emby-input" placeholder="ex: 1a2b3c4d5e..." />
+            <label class="inputLabel" for="ppPlaylistSelect">Playlist</label>
+            <select id="ppPlaylistSelect" is="emby-select"></select>
+            <div class="pp-playlist-actions">
+              <button id="ppReloadPlaylists" is="emby-button" type="button" class="raised">Atualizar playlists</button>
+            </div>
+            <div id="ppPlaylistManualWrap" class="pp-manual" hidden>
+              <label class="inputLabel" for="ppPlaylistId">Playlist ID (manual)</label>
+              <input id="ppPlaylistId" type="text" is="emby-input" placeholder="ex: 1a2b3c4d5e..." />
+            </div>
           </div>
           <div class="pp-col">
             <label class="inputLabel" for="ppPageSize">Page size (limit)</label>

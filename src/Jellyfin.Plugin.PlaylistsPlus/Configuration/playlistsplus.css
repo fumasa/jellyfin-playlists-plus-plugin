@@ -19,6 +19,8 @@
 .pp-actions{ align-items:center; }
 .pp-group{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
 .pp-label{ opacity:.85; margin-right:4px; }
+.pp-playlist-actions{ margin-top:8px; display:flex; flex-wrap:wrap; gap:8px; }
+.pp-manual{ margin-top:8px; }
 
 .pp-status{ width:100%; }
 .pp-progress{ height:8px; background:rgba(255,255,255,0.08); border-radius:8px; overflow:hidden; }

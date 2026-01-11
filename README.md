@@ -36,6 +36,14 @@ Dashboard → **Plugins** → **Playlists Plus** → **Settings**
 ## Release & plugin repository
 Jellyfin plugin repositories are served by a `manifest.json` containing plugin versions. Jellyfin's docs include an example manifest. citeturn13view0
 
+Custom repo URL (Dashboard → Plugins → Repositories):
+- `https://raw.githubusercontent.com/fumasa/jellyfin-playlists-plus-plugin/main/repo/manifest.json`
+
+Release flow:
+1. Update `<Version>` in `src/Jellyfin.Plugin.PlaylistsPlus/Jellyfin.Plugin.PlaylistsPlus.csproj`
+2. `git tag vX.Y.Z` and push the tag
+3. GitHub Actions builds the zip, creates the release, and updates `repo/manifest.json`
+
 See:
 - `repo/manifest.json` (template)
 - `tools/make-repo-manifest.ps1` / `tools/make-repo-manifest.sh`

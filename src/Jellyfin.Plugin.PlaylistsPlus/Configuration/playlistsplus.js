@@ -1,4 +1,3 @@
-\
 (function () {
   'use strict';
 
@@ -10,6 +9,8 @@
 
   const state = {
     playlistId: null,
+    playlists: [],
+    playlistsLoading: false,
     items: [],              // [{ index, itemId, playlistItemId, name, type, premiere, year }]
     total: null,
     startIndex: 0,
@@ -39,6 +40,14 @@
     return true;
   }
 
+  function parseMaybeJson(payload) {
+    if (payload == null) return payload;
+    if (typeof payload === 'string') {
+      return JSON.parse(payload);
+    }
+    return payload;
+  }
+
   function fmtDate(iso) {
     if (!iso) return '';
     const d = new Date(iso);
@@ -51,10 +60,10 @@
     return {
       index: pos,
       itemId: dto.Id,
-      playlistItemId: dto.PlaylistItemId || dto.PlaylistItemID || dto.PlaylistItemId, // be defensive
+      playlistItemId: dto.PlaylistItemId || dto.PlaylistItemID, // be defensive
       name: dto.Name || '(sem nome)',
       type: dto.Type || '',
-      premiere: dto.PremiereDate || dto.ProductionYear ? dto.PremiereDate : dto.PremiereDate,
+      premiere: dto.PremiereDate || null,
       year: dto.ProductionYear || null
     };
   }
@@ -71,6 +80,122 @@
       type: 'POST',
       url: window.ApiClient.getUrl(url)
     });
+  }
+
+  function getSelectedPlaylistId() {
+    const select = el('ppPlaylistSelect');
+    const manual = el('ppPlaylistId');
+    if (!select) return '';
+    const value = (select.value || '').trim();
+    if (value === '__manual__') {
+      return (manual?.value || '').trim();
+    }
+    return value;
+  }
+
+  function updatePlaylistSelectUi() {
+    const select = el('ppPlaylistSelect');
+    const manualWrap = el('ppPlaylistManualWrap');
+    if (!select || !manualWrap) return;
+    manualWrap.hidden = select.value !== '__manual__';
+  }
+
+  function setPlaylistSelectLoading() {
+    const select = el('ppPlaylistSelect');
+    const manualWrap = el('ppPlaylistManualWrap');
+    if (!select) return;
+    select.disabled = true;
+    select.innerHTML = '<option value="">Carregando playlists...</option>';
+    if (manualWrap) manualWrap.hidden = true;
+  }
+
+  function setPlaylistSelectError(message) {
+    const select = el('ppPlaylistSelect');
+    const manualWrap = el('ppPlaylistManualWrap');
+    if (!select) return;
+    select.disabled = false;
+    select.innerHTML = [
+      `<option value="">${escapeHtml(message)}</option>`,
+      '<option value="__manual__">Informar ID manualmente</option>'
+    ].join('');
+    select.value = '__manual__';
+    if (manualWrap) manualWrap.hidden = false;
+  }
+
+  function renderPlaylistOptions(previousId) {
+    const select = el('ppPlaylistSelect');
+    const manual = el('ppPlaylistId');
+    if (!select) return;
+
+    const playlists = state.playlists || [];
+    const options = [];
+    if (playlists.length) {
+      options.push('<option value="">Selecione uma playlist...</option>');
+    } else {
+      options.push('<option value="">Nenhuma playlist encontrada</option>');
+    }
+
+    playlists.forEach(p => {
+      const label = p.name || p.id || '(sem nome)';
+      const safeId = escapeHtml(p.id || '');
+      options.push(`<option value="${safeId}" title="${safeId}">${escapeHtml(label)}</option>`);
+    });
+
+    options.push('<option value="__manual__">Informar ID manualmente</option>');
+    select.innerHTML = options.join('');
+    select.disabled = false;
+
+    if (previousId) {
+      const exists = playlists.some(p => p.id === previousId);
+      if (exists) {
+        select.value = previousId;
+      } else {
+        select.value = '__manual__';
+        if (manual) manual.value = previousId;
+      }
+    } else if (playlists.length === 1 && playlists[0].id) {
+      select.value = playlists[0].id;
+    }
+
+    updatePlaylistSelectUi();
+  }
+
+  async function loadPlaylists() {
+    if (state.playlistsLoading) return;
+    if (!requireGlobals()) return;
+    const previousId = getSelectedPlaylistId();
+
+    state.playlistsLoading = true;
+    setPlaylistSelectLoading();
+
+    try {
+      const meText = await jfGet('/Users/Me');
+      const me = parseMaybeJson(meText);
+      const userId = me?.Id;
+      if (!userId) {
+        setPlaylistSelectError('Falha ao obter usuário atual.');
+        setStatus('Falha ao obter usuário atual.');
+        return;
+      }
+
+      const url = `/Users/${encodeURIComponent(userId)}/Items?IncludeItemTypes=Playlist&Recursive=true&SortBy=SortName&SortOrder=Ascending&Limit=2000`;
+      const resText = await jfGet(url);
+      const res = parseMaybeJson(resText);
+      const items = Array.isArray(res?.Items) ? res.Items : [];
+
+      state.playlists = items
+        .filter(item => item?.Id)
+        .map(item => ({ id: item.Id, name: item.Name || item.Id }))
+        .sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
+
+      renderPlaylistOptions(previousId);
+    } catch (e) {
+      console.error(e);
+      setPlaylistSelectError('Falha ao carregar playlists.');
+      setStatus('Falha ao carregar playlists. Verifique permissões.');
+    } finally {
+      state.playlistsLoading = false;
+    }
   }
 
   async function loadPage(reset) {
@@ -105,7 +230,7 @@
 
     let res;
     try {
-      res = typeof resText === 'string' ? JSON.parse(resText) : resText;
+      res = parseMaybeJson(resText);
     } catch (e) {
       console.error('Failed to parse response', resText);
       setStatus('Falha ao interpretar resposta do servidor.');
@@ -138,7 +263,8 @@
     const tbody = el('ppTbody');
     const rows = [];
 
-    const list = state.sortedItems || state.items;
+    const base = state.sortedItems || state.items;
+    const list = base.slice();
 
     for (let i = 0; i < list.length; i++) {
       const it = list[i];
@@ -191,7 +317,7 @@
   }
 
   async function moveAt(currentPos, newPos) {
-    const list = state.sortedItems || state.items;
+    const list = state.items;
     if (currentPos === newPos) return;
 
     const it = list[currentPos];
@@ -214,18 +340,20 @@
     // Apply by moving each item into its target position.
     // Strategy: iterate desired order, and for each position i, find that item in current list and Move it to i.
     const list = state.items;
+    const targetList = target.slice();
     const idToCurrentIndex = () => {
       const m = new Map();
       list.forEach((x, idx) => m.set(x.playlistItemId, idx));
       return m;
     };
 
+    state.sortedItems = null;
     setStatus('Aplicando ordenação (pode demorar)…');
     setProgress(0);
 
-    for (let i = 0; i < target.length; i++) {
+    for (let i = 0; i < targetList.length; i++) {
       const currentMap = idToCurrentIndex();
-      const desired = target[i];
+      const desired = targetList[i];
       const curIdx = currentMap.get(desired.playlistItemId);
 
       if (curIdx === undefined) continue;
@@ -234,11 +362,10 @@
         await new Promise(r => setTimeout(r, state.throttleMs));
       }
 
-      const pct = Math.round(((i + 1) / target.length) * 100);
+      const pct = Math.round(((i + 1) / targetList.length) * 100);
       setProgress(pct);
     }
 
-    state.sortedItems = null;
     renderRows();
     setStatus('Ordenação aplicada.');
   }
@@ -266,10 +393,17 @@
     setStatus('Prévia de ordenação pronta. Clique em "Aplicar ordenação" para efetivar.');
   }
 
+  function ensureMovesAllowed() {
+    if (!state.sortedItems) return true;
+    setStatus('Prévia de ordenação ativa. Aplique ou recarregue antes de mover itens.');
+    return false;
+  }
+
   function wireRowActions() {
     const tbody = el('ppTbody');
     tbody.querySelectorAll('button.ppUp').forEach(btn => {
       btn.addEventListener('click', async () => {
+        if (!ensureMovesAllowed()) return;
         const tr = btn.closest('tr');
         const pos = Number(tr.getAttribute('data-pos'));
         if (pos <= 0) return;
@@ -284,9 +418,10 @@
 
     tbody.querySelectorAll('button.ppDown').forEach(btn => {
       btn.addEventListener('click', async () => {
+        if (!ensureMovesAllowed()) return;
         const tr = btn.closest('tr');
         const pos = Number(tr.getAttribute('data-pos'));
-        const list = state.sortedItems || state.items;
+        const list = state.items;
         if (pos >= list.length - 1) return;
         try {
           await moveAt(pos, pos + 1);
@@ -299,9 +434,10 @@
 
     tbody.querySelectorAll('button.ppMove').forEach(btn => {
       btn.addEventListener('click', async () => {
+        if (!ensureMovesAllowed()) return;
         const tr = btn.closest('tr');
         const pos = Number(tr.getAttribute('data-pos'));
-        const list = state.sortedItems || state.items;
+        const list = state.items;
         const max = list.length - 1;
         const raw = prompt(`Mover item para qual índice? (0..${max})`, String(pos));
         if (raw == null) return;
@@ -346,16 +482,24 @@
   }
 
   function bindButtons() {
+    el('ppPlaylistSelect').addEventListener('change', () => {
+      updatePlaylistSelectUi();
+    });
+
+    el('ppReloadPlaylists').addEventListener('click', () => {
+      loadPlaylists();
+    });
+
     el('ppLoad').addEventListener('click', () => {
       if (!requireGlobals()) return;
 
-      state.playlistId = el('ppPlaylistId').value.trim();
+      state.playlistId = getSelectedPlaylistId();
       state.limit = Number(el('ppPageSize').value) || 200;
       state.throttleMs = Number(el('ppMoveThrottle').value) || 0;
       state.autoLoadAll = !!el('ppAutoLoadAll').checked;
 
       if (!state.playlistId) {
-        setStatus('Informe um Playlist ID.');
+        setStatus('Selecione uma playlist.');
         return;
       }
 
@@ -419,8 +563,10 @@
 
   function onPageShow() {
     // This is invoked when navigating to the plugin page inside Dashboard.
-    setStatus('Pronto. Informe um Playlist ID e clique em Carregar.');
+    if (!requireGlobals()) return;
+    setStatus('Pronto. Escolha uma playlist e clique em Carregar.');
     setProgress(0);
+    loadPlaylists();
 
     // Load defaults from plugin config (optional)
     try {

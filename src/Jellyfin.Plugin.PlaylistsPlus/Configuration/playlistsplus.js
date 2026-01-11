@@ -586,10 +586,12 @@
     }
   }
 
-  const page = document.querySelector('#PlaylistsPlusPage');
-  if (page) {
-    page.addEventListener('pageshow', onPageShow);
-  } else {
-    document.addEventListener('DOMContentLoaded', onPageShow);
+  function onViewShow(e) {
+    const target = e && e.target;
+    if (!target || target.id !== 'PlaylistsPlusPage') return;
+    onPageShow();
   }
+
+  document.addEventListener('viewshow', onViewShow);
+  document.addEventListener('pageshow', onViewShow);
 })();

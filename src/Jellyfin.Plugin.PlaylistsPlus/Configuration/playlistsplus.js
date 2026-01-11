@@ -161,6 +161,47 @@
     updatePlaylistSelectUi();
   }
 
+  async function getCurrentUserId() {
+    let userId = '';
+
+    try {
+      if (window.ApiClient?.getCurrentUserId) {
+        userId = window.ApiClient.getCurrentUserId();
+      }
+    } catch (e) {
+      console.warn('ApiClient.getCurrentUserId failed', e);
+    }
+
+    if (!userId && window.Dashboard?.getCurrentUserId) {
+      try {
+        userId = window.Dashboard.getCurrentUserId();
+      } catch (e) {
+        console.warn('Dashboard.getCurrentUserId failed', e);
+      }
+    }
+
+    if (!userId && window.ApiClient?.getCurrentUser) {
+      try {
+        const me = await window.ApiClient.getCurrentUser();
+        userId = me?.Id || '';
+      } catch (e) {
+        console.warn('ApiClient.getCurrentUser failed', e);
+      }
+    }
+
+    if (!userId) {
+      try {
+        const meText = await jfGet('/Users/Me');
+        const me = parseMaybeJson(meText);
+        userId = me?.Id || me?.User?.Id || '';
+      } catch (e) {
+        console.warn('GET /Users/Me failed', e);
+      }
+    }
+
+    return userId || null;
+  }
+
   async function loadPlaylists() {
     if (state.playlistsLoading) return;
     if (!requireGlobals()) return;
@@ -170,18 +211,30 @@
     setPlaylistSelectLoading();
 
     try {
-      const meText = await jfGet('/Users/Me');
-      const me = parseMaybeJson(meText);
-      const userId = me?.Id;
+      const userId = await getCurrentUserId();
       if (!userId) {
         setPlaylistSelectError('Falha ao obter usuário atual.');
         setStatus('Falha ao obter usuário atual.');
         return;
       }
 
-      const url = `/Users/${encodeURIComponent(userId)}/Items?IncludeItemTypes=Playlist&Recursive=true&SortBy=SortName&SortOrder=Ascending&Limit=2000`;
-      const resText = await jfGet(url);
-      const res = parseMaybeJson(resText);
+      const query = {
+        IncludeItemTypes: 'Playlist',
+        Recursive: true,
+        SortBy: 'SortName',
+        SortOrder: 'Ascending',
+        Limit: 2000
+      };
+
+      let res;
+      if (window.ApiClient?.getItems) {
+        res = await window.ApiClient.getItems(userId, query);
+      } else {
+        const url = `/Users/${encodeURIComponent(userId)}/Items?IncludeItemTypes=Playlist&Recursive=true&SortBy=SortName&SortOrder=Ascending&Limit=2000`;
+        const resText = await jfGet(url);
+        res = parseMaybeJson(resText);
+      }
+
       const items = Array.isArray(res?.Items) ? res.Items : [];
 
       state.playlists = items

@@ -75,7 +75,11 @@
   async function jfGet(url) {
     return window.ApiClient.ajax({
       type: 'GET',
-      url: window.ApiClient.getUrl(url)
+      url: window.ApiClient.getUrl(url),
+      dataType: 'json',
+      headers: {
+        accept: 'application/json'
+      }
     });
   }
 

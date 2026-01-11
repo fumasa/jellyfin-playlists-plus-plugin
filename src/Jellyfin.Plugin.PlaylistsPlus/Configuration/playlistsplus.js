@@ -71,6 +71,9 @@
       seasonNumber: dto.ParentIndexNumber ?? null,
       episodeNumber: dto.IndexNumber ?? null,
       episodeNumberEnd: dto.IndexNumberEnd ?? null,
+      tags: Array.isArray(dto.Tags) ? dto.Tags : [],
+      taglines: Array.isArray(dto.Taglines) ? dto.Taglines : [],
+      sortName: dto.ForcedSortName || dto.SortName || null,
       premiere: dto.PremiereDate || null,
       year: dto.ProductionYear || null
     };
@@ -144,6 +147,409 @@
       type: 'POST',
       url: window.ApiClient.getUrl(url)
     });
+  }
+
+  async function jfPostUrl(url) {
+    return window.ApiClient.ajax({
+      type: 'POST',
+      url: url
+    });
+  }
+
+  async function jfDeleteUrl(url) {
+    return window.ApiClient.ajax({
+      type: 'DELETE',
+      url: url
+    });
+  }
+
+  function hasOwn(obj, key) {
+    return Object.prototype.hasOwnProperty.call(obj, key);
+  }
+
+  function parseStringList(value) {
+    if (Array.isArray(value)) {
+      return value.map(v => String(v).trim()).filter(Boolean);
+    }
+    if (typeof value === 'string') {
+      return value
+        .split(/[;,]/g)
+        .map(v => v.trim())
+        .filter(Boolean);
+    }
+    return [];
+  }
+
+  function getSelectedPlaylistName() {
+    const select = el('ppPlaylistSelect');
+    if (!select) return '';
+    const selected = select.options[select.selectedIndex];
+    return selected ? selected.textContent.trim() : '';
+  }
+
+  function normalizeImportItem(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    const itemId = String(raw.itemId || raw.ItemId || raw.id || raw.Id || '').trim();
+    if (!itemId) return null;
+
+    const tagsField = hasOwn(raw, 'tags') ? raw.tags : (hasOwn(raw, 'Tags') ? raw.Tags : undefined);
+    const taglinesField = hasOwn(raw, 'taglines') ? raw.taglines : (hasOwn(raw, 'Taglines') ? raw.Taglines : undefined);
+    const taglineField = hasOwn(raw, 'tagline') ? raw.tagline : (hasOwn(raw, 'Tagline') ? raw.Tagline : undefined);
+    const sortNameField = hasOwn(raw, 'sortName') ? raw.sortName
+      : (hasOwn(raw, 'SortName') ? raw.SortName
+        : (hasOwn(raw, 'forcedSortName') ? raw.forcedSortName
+          : (hasOwn(raw, 'ForcedSortName') ? raw.ForcedSortName : undefined)));
+    const premiereField = hasOwn(raw, 'premiereDate') ? raw.premiereDate : (hasOwn(raw, 'PremiereDate') ? raw.PremiereDate : undefined);
+    const yearField = hasOwn(raw, 'productionYear') ? raw.productionYear : (hasOwn(raw, 'ProductionYear') ? raw.ProductionYear : undefined);
+
+    return {
+      itemId,
+      raw,
+      tags: parseStringList(tagsField),
+      hasTags: tagsField !== undefined,
+      taglines: parseStringList(taglinesField || taglineField),
+      hasTaglines: taglinesField !== undefined || taglineField !== undefined,
+      sortName: typeof sortNameField === 'string' ? sortNameField : (sortNameField != null ? String(sortNameField) : null),
+      hasSortName: sortNameField !== undefined,
+      premiereDate: premiereField != null ? String(premiereField) : null,
+      hasPremiereDate: premiereField !== undefined,
+      productionYear: yearField != null && yearField !== '' ? Number(yearField) : null,
+      hasProductionYear: yearField !== undefined
+    };
+  }
+
+  function normalizeImportData(payload) {
+    if (!payload) return [];
+    const items = Array.isArray(payload)
+      ? payload
+      : Array.isArray(payload.items)
+        ? payload.items
+        : [];
+
+    return items.map(normalizeImportItem).filter(Boolean);
+  }
+
+  async function ensureAllLoaded() {
+    if (!state.playlistId) {
+      setStatus('Selecione uma playlist.');
+      return false;
+    }
+
+    if (state.total && state.items.length === state.total) {
+      return true;
+    }
+
+    const previousAuto = state.autoLoadAll;
+    state.autoLoadAll = true;
+    await loadPage(true);
+    state.autoLoadAll = previousAuto;
+
+    if (!state.total || state.items.length < state.total) {
+      setStatus('Não foi possível carregar todos os itens.');
+      return false;
+    }
+
+    return true;
+  }
+
+  function downloadJson(filename, data) {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function readJsonFile(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          resolve(JSON.parse(reader.result));
+        } catch (e) {
+          reject(e);
+        }
+      };
+      reader.onerror = () => reject(reader.error || new Error('Falha ao ler arquivo.'));
+      reader.readAsText(file);
+    });
+  }
+
+  async function exportPlaylist() {
+    const includeMeta = !!el('ppExportMeta')?.checked;
+    const ok = await ensureAllLoaded();
+    if (!ok) return;
+
+    const playlistName = getSelectedPlaylistName();
+    const payload = {
+      version: 1,
+      playlistId: state.playlistId,
+      playlistName: playlistName || null,
+      exportedAt: new Date().toISOString(),
+      items: state.items.map(item => {
+        const base = {
+          itemId: item.itemId,
+          name: item.name,
+          type: item.type,
+          seriesName: item.seriesName,
+          seasonNumber: item.seasonNumber,
+          episodeNumber: item.episodeNumber,
+          episodeNumberEnd: item.episodeNumberEnd,
+          premiereDate: item.premiere,
+          productionYear: item.year
+        };
+
+        if (includeMeta) {
+          base.sortName = item.sortName;
+          base.tags = item.tags;
+          base.taglines = item.taglines;
+        }
+
+        return base;
+      })
+    };
+
+    const safeName = (playlistName || 'playlist').replace(/[^\w.-]+/g, '_');
+    downloadJson(`playlistsplus_${safeName}.json`, payload);
+    setStatus('Exportação concluída.');
+  }
+
+  function getImportOptions() {
+    return {
+      reorder: !!el('ppImportReorder')?.checked,
+      addMissing: !!el('ppImportAddMissing')?.checked,
+      removeExtra: !!el('ppImportRemoveExtra')?.checked,
+      applyMetadata: !!el('ppImportApplyMetadata')?.checked,
+      metaTagline: !!el('ppMetaTagline')?.checked,
+      metaTags: !!el('ppMetaTags')?.checked,
+      metaSortName: !!el('ppMetaSortName')?.checked,
+      metaPremiere: !!el('ppMetaPremiere')?.checked,
+      metaYear: !!el('ppMetaYear')?.checked
+    };
+  }
+
+  async function addItemsToPlaylist(ids) {
+    const chunkSize = 100;
+    for (let i = 0; i < ids.length; i += chunkSize) {
+      const chunk = ids.slice(i, i + chunkSize);
+      const url = window.ApiClient.getUrl(`Playlists/${encodeURIComponent(state.playlistId)}/Items`, {
+        Ids: chunk.join(',')
+      });
+      await jfPostUrl(url);
+    }
+  }
+
+  async function removeItemsFromPlaylist(entryIds) {
+    const chunkSize = 100;
+    for (let i = 0; i < entryIds.length; i += chunkSize) {
+      const chunk = entryIds.slice(i, i + chunkSize);
+      const url = window.ApiClient.getUrl(`Playlists/${encodeURIComponent(state.playlistId)}/Items`, {
+        EntryIds: chunk.join(',')
+      });
+      await jfDeleteUrl(url);
+    }
+  }
+
+  function buildTargetOrder(items, importIds, removeExtra) {
+    const queues = new Map();
+    const consumed = new Set();
+
+    items.forEach(item => {
+      const key = item.itemId;
+      if (!queues.has(key)) queues.set(key, []);
+      queues.get(key).push(item);
+    });
+
+    const target = [];
+    importIds.forEach(id => {
+      const queue = queues.get(id);
+      if (queue && queue.length) {
+        const picked = queue.shift();
+        consumed.add(picked.playlistItemId);
+        target.push(picked);
+      }
+    });
+
+    if (!removeExtra) {
+      items.forEach(item => {
+        if (!consumed.has(item.playlistItemId)) {
+          consumed.add(item.playlistItemId);
+          target.push(item);
+        }
+      });
+    }
+
+    return target;
+  }
+
+  async function fetchItemForUpdate(itemId) {
+    const userId = await getCurrentUserId();
+    if (!userId) {
+      throw new Error('Falha ao obter usuário atual.');
+    }
+    if (window.ApiClient?.getItem) {
+      return window.ApiClient.getItem(userId, itemId);
+    }
+    const data = await jfGet(`/Users/${encodeURIComponent(userId)}/Items/${encodeURIComponent(itemId)}`);
+    return parseMaybeJson(data);
+  }
+
+  function buildUpdatePayload(item, meta, options) {
+    const payload = {
+      Id: item.Id,
+      Name: item.Name,
+      OriginalTitle: item.OriginalTitle,
+      ForcedSortName: item.ForcedSortName || item.SortName || '',
+      CommunityRating: item.CommunityRating,
+      CriticRating: item.CriticRating,
+      IndexNumber: item.IndexNumber,
+      AirsBeforeSeasonNumber: item.AirsBeforeSeasonNumber,
+      AirsAfterSeasonNumber: item.AirsAfterSeasonNumber,
+      AirsBeforeEpisodeNumber: item.AirsBeforeEpisodeNumber,
+      ParentIndexNumber: item.ParentIndexNumber,
+      DisplayOrder: item.DisplayOrder,
+      Album: item.Album,
+      AlbumArtists: item.AlbumArtists,
+      ArtistItems: item.ArtistItems,
+      Overview: item.Overview,
+      Status: item.Status,
+      AirDays: item.AirDays,
+      AirTime: item.AirTime,
+      Genres: item.Genres || [],
+      Tags: item.Tags || [],
+      Studios: item.Studios || [],
+      PremiereDate: item.PremiereDate,
+      DateCreated: item.DateCreated,
+      EndDate: item.EndDate,
+      ProductionYear: item.ProductionYear,
+      Height: item.Height,
+      AspectRatio: item.AspectRatio,
+      Video3DFormat: item.Video3DFormat,
+      OfficialRating: item.OfficialRating,
+      CustomRating: item.CustomRating,
+      People: item.People,
+      LockData: item.LockData,
+      LockedFields: item.LockedFields,
+      ProviderIds: { ...(item.ProviderIds || {}) },
+      PreferredMetadataLanguage: item.PreferredMetadataLanguage,
+      PreferredMetadataCountryCode: item.PreferredMetadataCountryCode,
+      RunTimeTicks: item.RunTimeTicks,
+      Taglines: item.Taglines || []
+    };
+
+    if (options.metaSortName && meta.hasSortName) {
+      payload.ForcedSortName = meta.sortName || '';
+    }
+    if (options.metaTags && meta.hasTags) {
+      payload.Tags = meta.tags || [];
+    }
+    if (options.metaTagline && meta.hasTaglines) {
+      payload.Taglines = meta.taglines || [];
+    }
+    if (options.metaPremiere && meta.hasPremiereDate) {
+      payload.PremiereDate = meta.premiereDate || null;
+    }
+    if (options.metaYear && meta.hasProductionYear) {
+      payload.ProductionYear = meta.productionYear || null;
+    }
+
+    return payload;
+  }
+
+  async function applyMetadataUpdates(importItems, options) {
+    const metaMap = new Map();
+    importItems.forEach(item => {
+      metaMap.set(item.itemId, item);
+    });
+
+    const itemsToUpdate = state.items.filter(item => metaMap.has(item.itemId));
+    if (!itemsToUpdate.length) {
+      setStatus('Nenhum item com metadados para aplicar.');
+      return;
+    }
+
+    setStatus(`Aplicando metadados em ${itemsToUpdate.length} itens...`);
+    setProgress(0);
+
+    for (let i = 0; i < itemsToUpdate.length; i++) {
+      const entry = itemsToUpdate[i];
+      const meta = metaMap.get(entry.itemId);
+
+      try {
+        const item = await fetchItemForUpdate(entry.itemId);
+        const payload = buildUpdatePayload(item, meta, options);
+        if (window.ApiClient?.updateItem) {
+          await window.ApiClient.updateItem(payload);
+        } else {
+          await window.ApiClient.ajax({
+            type: 'POST',
+            url: window.ApiClient.getUrl(`Items/${encodeURIComponent(entry.itemId)}`),
+            data: JSON.stringify(payload),
+            contentType: 'application/json'
+          });
+        }
+      } catch (e) {
+        console.error(e);
+        setStatus(`Erro ao atualizar metadados de ${entry.itemId}`);
+      }
+
+      const pct = Math.round(((i + 1) / itemsToUpdate.length) * 100);
+      setProgress(pct);
+      if (state.throttleMs) {
+        await new Promise(r => setTimeout(r, state.throttleMs));
+      }
+    }
+
+    setStatus('Metadados aplicados.');
+  }
+
+  async function importPlaylist(payload) {
+    const options = getImportOptions();
+    const importItems = normalizeImportData(payload);
+    if (!importItems.length) {
+      setStatus('Arquivo de importação vazio ou inválido.');
+      return;
+    }
+
+    const ok = await ensureAllLoaded();
+    if (!ok) return;
+
+    const importIds = importItems.map(item => item.itemId);
+    const currentIds = new Set(state.items.map(item => item.itemId));
+
+    if (options.addMissing) {
+      const missing = importIds.filter(id => !currentIds.has(id));
+      if (missing.length) {
+        setStatus(`Adicionando ${missing.length} itens faltantes...`);
+        await addItemsToPlaylist(missing);
+        await loadPage(true);
+      }
+    }
+
+    if (options.removeExtra) {
+      const importIdSet = new Set(importIds);
+      const extraEntryIds = state.items
+        .filter(item => !importIdSet.has(item.itemId) && item.playlistItemId)
+        .map(item => item.playlistItemId);
+      if (extraEntryIds.length) {
+        setStatus(`Removendo ${extraEntryIds.length} itens extras...`);
+        await removeItemsFromPlaylist(extraEntryIds);
+        await loadPage(true);
+      }
+    }
+
+    if (options.reorder) {
+      const target = buildTargetOrder(state.items, importIds, options.removeExtra);
+      await applyTargetOrder(target);
+    }
+
+    if (options.applyMetadata && (options.metaTags || options.metaTagline || options.metaSortName || options.metaPremiere || options.metaYear)) {
+      await applyMetadataUpdates(importItems, options);
+    }
+
+    setStatus('Importação concluída.');
   }
 
   function getSelectedPlaylistId() {
@@ -338,7 +744,9 @@
     const fields = [
       'PremiereDate',
       'ProductionYear',
-      'SortName'
+      'SortName',
+      'Taglines',
+      'Tags'
     ].join(',');
 
     const url = `/Playlists/${encodeURIComponent(state.playlistId)}/Items?startIndex=${state.startIndex}&limit=${state.limit}&fields=${encodeURIComponent(fields)}`;
@@ -694,6 +1102,44 @@
       }
       try { await moveSelectedTo(idx); } catch (e) { console.error(e); setStatus(`Erro: ${e.message || e}`); }
     });
+
+    const metaToggle = el('ppImportApplyMetadata');
+    if (metaToggle) {
+      metaToggle.addEventListener('change', () => {
+        const metaFields = el('ppImportMetaFields');
+        if (metaFields) metaFields.hidden = !metaToggle.checked;
+      });
+    }
+
+    el('ppExport').addEventListener('click', async () => {
+      try {
+        await exportPlaylist();
+      } catch (e) {
+        console.error(e);
+        setStatus(`Erro ao exportar: ${e.message || e}`);
+      }
+    });
+
+    const importFile = el('ppImportFile');
+    el('ppImport').addEventListener('click', () => {
+      if (importFile) importFile.click();
+    });
+    if (importFile) {
+      importFile.addEventListener('change', async () => {
+        const file = importFile.files && importFile.files[0];
+        if (!file) return;
+        setStatus('Lendo arquivo de importação...');
+        try {
+          const data = await readJsonFile(file);
+          await importPlaylist(data);
+        } catch (e) {
+          console.error(e);
+          setStatus('Falha ao importar arquivo. Verifique o JSON.');
+        } finally {
+          importFile.value = '';
+        }
+      });
+    }
   }
 
   function onPageShow() {

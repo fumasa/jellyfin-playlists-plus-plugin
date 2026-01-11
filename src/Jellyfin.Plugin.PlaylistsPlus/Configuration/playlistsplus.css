@@ -21,6 +21,8 @@
 .pp-label{ opacity:.85; margin-right:4px; }
 .pp-playlist-actions{ margin-top:8px; display:flex; flex-wrap:wrap; gap:8px; }
 .pp-manual{ margin-top:8px; }
+.pp-import{ align-items:center; }
+.pp-meta-fields{ display:flex; gap:10px; flex-wrap:wrap; }
 
 .pp-status{ width:100%; }
 .pp-progress{ height:8px; background:rgba(255,255,255,0.08); border-radius:8px; overflow:hidden; }

@@ -19,6 +19,7 @@
     autoLoadAll: true,
     sortedItems: null
   };
+  let uiBound = false;
 
   function setStatus(msg) {
     el('ppStatusLine').textContent = msg;
@@ -482,6 +483,9 @@
   }
 
   function bindButtons() {
+    if (uiBound) return;
+    uiBound = true;
+
     el('ppPlaylistSelect').addEventListener('change', () => {
       updatePlaylistSelectUi();
     });
@@ -564,6 +568,7 @@
   function onPageShow() {
     // This is invoked when navigating to the plugin page inside Dashboard.
     if (!requireGlobals()) return;
+    bindButtons();
     setStatus('Pronto. Escolha uma playlist e clique em Carregar.');
     setProgress(0);
     loadPlaylists();
@@ -581,22 +586,10 @@
     }
   }
 
-  document.addEventListener('DOMContentLoaded', function () {
-    // Patch placeholder with plugin GUID at runtime.
-    // (We can't easily inject server-side; so we replace token in JS itself)
-    const guid = (window.PlaylistsPlusPluginGuid || '').toString().trim();
-    if (!guid) {
-      // fallback: try to parse from URL (/plugin/<guid>/PlaylistsPlus)
-      const m = (location.hash || '').match(/plugin\/([0-9a-fA-F-]{36})\//);
-      if (m) window.PlaylistsPlusPluginGuid = m[1];
-    }
-
-    // Replace token in getPluginConfiguration call by rewriting function string is too much;
-    // We'll just set a global consumed above.
-    // NOTE: for best results, set window.PlaylistsPlusPluginGuid in configPage.html if you later template it server-side.
-    // For now, we re-run with derived guid if possible:
-    // (the call above uses a token; but it only affects config defaults; safe to ignore)
-    bindButtons();
-    onPageShow();
-  });
+  const page = document.querySelector('#PlaylistsPlusPage');
+  if (page) {
+    page.addEventListener('pageshow', onPageShow);
+  } else {
+    document.addEventListener('DOMContentLoaded', onPageShow);
+  }
 })();

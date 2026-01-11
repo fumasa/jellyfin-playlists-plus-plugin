@@ -2,16 +2,18 @@
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
-    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <AssemblyName>Jellyfin.Plugin.PlaylistsPlus</AssemblyName>
     <RootNamespace>Jellyfin.Plugin.PlaylistsPlus</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
 
     <!-- Jellyfin plugin metadata -->
-    <Version>0.1.0.2</Version>
     <Authors>you</Authors>
     <Company>you</Company>
     <Description>Admin-focused playlist management UI inside the Jellyfin Dashboard.</Description>
+    <AssemblyVersion>$(Version)</AssemblyVersion>
+    <FileVersion>$(Version)</FileVersion>
+    <InformationalVersion>$(Version)</InformationalVersion>
   </PropertyGroup>
 
   <ItemGroup>

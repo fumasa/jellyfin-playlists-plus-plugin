@@ -1,0 +1,11 @@
+[
+  {
+    "guid": "b9b9a50f-8b3a-4d2a-9c0e-7e2d0d7c2d73",
+    "name": "Playlists Plus",
+    "overview": "Manage, sort and bulk-reorder playlists with an admin-first UI.",
+    "description": "Admin-focused playlist management UI inside the Jellyfin Dashboard.",
+    "owner": "fumasa",
+    "category": "General",
+    "versions": []
+  }
+]

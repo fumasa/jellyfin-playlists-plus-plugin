@@ -1,4 +1,4 @@
-name: Release
+name: release
 
 on:
   push:
@@ -9,121 +9,111 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
-
-      - name: Resolve version
-        id: version
-        run: |
-          set -euo pipefail
-          TAG_VERSION="${GITHUB_REF_NAME#v}"
-          CS_VERSION="$(dotnet msbuild src/Jellyfin.Plugin.PlaylistsPlus/Jellyfin.Plugin.PlaylistsPlus.csproj -getproperty:Version -nologo)"
-          if [[ "$TAG_VERSION" != "$CS_VERSION" ]]; then
-            echo "Tag version ${TAG_VERSION} does not match csproj version ${CS_VERSION}." >&2
-            exit 1
-          fi
-          echo "version=${TAG_VERSION}" >> "$GITHUB_OUTPUT"
+          dotnet-version: "8.0.x"
 
       - name: Restore
         run: dotnet restore
 
       - name: Build
-        run: dotnet build -c Release --no-restore
-
-      - name: Pack plugin zip
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          mkdir -p out/plugin
-          cp -R src/Jellyfin.Plugin.PlaylistsPlus/bin/Release/net8.0/* out/plugin/
-          cd out
-          zip -r "Jellyfin.Plugin.PlaylistsPlus_${VERSION}.zip" plugin
+          VERSION_NUM="${GITHUB_REF_NAME#v}"
+          DOT_COUNT=$(grep -o "\\." <<< "$VERSION_NUM" | wc -l || true)
+          if [[ "$DOT_COUNT" -eq 2 ]]; then
+            BUILD_VERSION="${VERSION_NUM}.0"
+          else
+            BUILD_VERSION="${VERSION_NUM}"
+          fi
+          dotnet build -c Release -p:Version=${BUILD_VERSION}
+          echo "VERSION=${VERSION_NUM}" >> "$GITHUB_ENV"
+          echo "BUILD_VERSION=${BUILD_VERSION}" >> "$GITHUB_ENV"
+
+      - name: Package
+        run: |
+          set -euo pipefail
+          mkdir -p dist/package
+          cp -R src/Jellyfin.Plugin.PlaylistsPlus/bin/Release/net8.0/* dist/package/
+          (cd dist/package && zip -r ../Jellyfin.Plugin.PlaylistsPlus_v${VERSION}.zip .)
 
       - name: Checkout main for manifest update
-        run: git checkout main
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git checkout main
+          git pull --rebase origin main
 
       - name: Update manifest
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-          REPOSITORY: ${{ github.repository }}
-          TARGET_ABI: 10.10.3.0
         run: |
           set -euo pipefail
-          ZIP_PATH="out/Jellyfin.Plugin.PlaylistsPlus_${VERSION}.zip"
-          CHECKSUM="$(md5sum "${ZIP_PATH}" | awk '{print $1}')"
-          TS="$(date -u '+%Y-%m-%d %H:%M:%S')"
-          export CHECKSUM TS
           python3 - <<'PY'
-import json
-import os
+          import datetime
+          import hashlib
+          import json
+          import os
 
-version = os.environ["VERSION"]
-checksum = os.environ["CHECKSUM"]
-timestamp = os.environ["TS"]
-repo = os.environ["REPOSITORY"]
-target_abi = os.environ["TARGET_ABI"]
+          version = os.environ["VERSION"]
+          build_version = os.environ["BUILD_VERSION"]
+          tag = f"v{version}"
+          repo = os.environ["GITHUB_REPOSITORY"]
+          zip_path = f"dist/Jellyfin.Plugin.PlaylistsPlus_v{version}.zip"
 
-manifest_path = "repo/manifest.json"
-with open(manifest_path, "r", encoding="utf-8") as f:
-    data = json.load(f)
+          with open(zip_path, "rb") as f:
+              checksum = hashlib.md5(f.read()).hexdigest().upper()
 
-entry = data[0]
-entry["owner"] = repo.split("/")[0]
+          source_url = f"https://github.com/{repo}/releases/download/{tag}/Jellyfin.Plugin.PlaylistsPlus_v{version}.zip"
+          changelog = f"https://github.com/{repo}/releases/tag/{tag}"
+          timestamp = datetime.datetime.utcnow().date().isoformat()
 
-new_version = {
-    "version": version,
-    "changelog": f"Release {version}.",
-    "targetAbi": target_abi,
-    "sourceUrl": f"https://github.com/{repo}/releases/download/v{version}/Jellyfin.Plugin.PlaylistsPlus_{version}.zip",
-    "checksum": checksum,
-    "timestamp": timestamp
-}
+          manifest_path = "manifest.json"
+          with open(manifest_path, "r", encoding="utf-8") as f:
+              manifest = json.load(f)
 
-versions = entry.get("versions") or []
-for i, existing in enumerate(versions):
-    if existing.get("version") == version:
-        merged = dict(existing)
-        merged.update(new_version)
-        versions[i] = merged
-        break
-else:
-    versions.insert(0, new_version)
+          guid = "b9b9a50f-8b3a-4d2a-9c0e-7e2d0d7c2d73"
+          plugin = next((p for p in manifest if p.get("guid") == guid), None)
+          if plugin is None:
+              raise SystemExit("Plugin GUID not found in manifest.json")
 
-entry["versions"] = versions
+          versions = plugin.get("versions", [])
+          versions = [v for v in versions if v.get("version") != build_version]
+          versions.insert(0, {
+              "version": build_version,
+              "changelog": changelog,
+              "targetAbi": "10.10.3.0",
+              "sourceUrl": source_url,
+              "checksum": checksum,
+              "timestamp": timestamp
+          })
+          plugin["versions"] = versions
 
-with open(manifest_path, "w", encoding="utf-8") as f:
-    json.dump(data, f, indent=2)
-print("Updated", manifest_path, "version", version)
-PY
+          with open(manifest_path, "w", encoding="utf-8") as f:
+              json.dump(manifest, f, indent=2)
+              f.write("\n")
+          PY
 
       - name: Commit manifest
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
-          git add repo/manifest.json
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add manifest.json
           if git diff --cached --quiet; then
             echo "No manifest changes to commit."
             exit 0
           fi
-          git -c user.name="github-actions[bot]" -c user.email="github-actions[bot]@users.noreply.github.com" \
-            commit -m "Update manifest for v${VERSION}"
-          git push origin main
+          git commit -m "Update manifest for ${GITHUB_REF_NAME}"
+          git push origin HEAD:main
 
-      - name: Create release
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
+      - name: Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ env.VERSION }}
-          name: v${{ env.VERSION }}
-          files: out/Jellyfin.Plugin.PlaylistsPlus_${{ env.VERSION }}.zip
+          files: dist/Jellyfin.Plugin.PlaylistsPlus_v${{ env.VERSION }}.zip

@@ -6,6 +6,15 @@
     "description": "Admin-focused playlist management UI inside the Jellyfin Dashboard.",
     "owner": "fumasa",
     "category": "General",
-    "versions": []
+    "versions": [
+      {
+        "version": "0.1.0.0",
+        "changelog": "https://github.com/fumasa/jellyfin-playlists-plus-plugin/releases/tag/v0.1.0",
+        "targetAbi": "10.10.3.0",
+        "sourceUrl": "https://github.com/fumasa/jellyfin-playlists-plus-plugin/releases/download/v0.1.0/Jellyfin.Plugin.PlaylistsPlus_v0.1.0.zip",
+        "checksum": "4680CD014D9989DE8566693681C6F8C0",
+        "timestamp": "2026-01-11"
+      }
+    ]
   }
 ]

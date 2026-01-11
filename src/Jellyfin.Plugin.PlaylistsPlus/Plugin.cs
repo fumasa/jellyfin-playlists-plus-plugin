@@ -33,6 +33,8 @@ public class Plugin : BasePlugin<Configuration.PluginConfiguration>, IHasWebPage
         yield return new PluginPageInfo
         {
             Name = "PlaylistsPlus",
+            DisplayName = "Playlists+",
+            EnableInMainMenu = true,
             EmbeddedResourcePath = GetType().Namespace + ".Configuration.configPage.html"
         };
         yield return new PluginPageInfo

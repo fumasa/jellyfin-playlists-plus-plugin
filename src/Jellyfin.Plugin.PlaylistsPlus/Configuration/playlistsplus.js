@@ -22,11 +22,14 @@
   let uiBound = false;
 
   function setStatus(msg) {
-    el('ppStatusLine').textContent = msg;
+    const status = el('ppStatusLine');
+    if (status) status.textContent = msg;
   }
 
   function setProgress(pct) {
-    el('ppProgressBar').style.width = `${Math.max(0, Math.min(100, pct))}%`;
+    const bar = el('ppProgressBar');
+    if (!bar) return;
+    bar.style.width = `${Math.max(0, Math.min(100, pct))}%`;
   }
 
   function requireGlobals() {
@@ -86,10 +89,11 @@
   function getSelectedPlaylistId() {
     const select = el('ppPlaylistSelect');
     const manual = el('ppPlaylistId');
-    if (!select) return '';
+    const manualValue = (manual?.value || '').trim();
+    if (!select) return manualValue;
     const value = (select.value || '').trim();
-    if (value === '__manual__') {
-      return (manual?.value || '').trim();
+    if (!value || value === '__manual__') {
+      return manualValue;
     }
     return value;
   }
@@ -98,7 +102,8 @@
     const select = el('ppPlaylistSelect');
     const manualWrap = el('ppPlaylistManualWrap');
     if (!select || !manualWrap) return;
-    manualWrap.hidden = select.value !== '__manual__';
+    const noPlaylists = !state.playlists || state.playlists.length === 0;
+    manualWrap.hidden = !(select.value === '__manual__' || (noPlaylists && !select.value));
   }
 
   function setPlaylistSelectLoading() {
@@ -154,11 +159,14 @@
         select.value = '__manual__';
         if (manual) manual.value = previousId;
       }
+    } else if (!playlists.length) {
+      select.value = '__manual__';
     } else if (playlists.length === 1 && playlists[0].id) {
       select.value = playlists[0].id;
     }
 
     updatePlaylistSelectUi();
+    select.dispatchEvent(new Event('change'));
   }
 
   async function getCurrentUserId() {
@@ -234,6 +242,7 @@
         const resText = await jfGet(url);
         res = parseMaybeJson(resText);
       }
+      res = parseMaybeJson(res);
 
       const items = Array.isArray(res?.Items) ? res.Items : [];
 
@@ -243,6 +252,7 @@
         .sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
 
       renderPlaylistOptions(previousId);
+      setStatus(`Playlists encontradas: ${state.playlists.length}`);
     } catch (e) {
       console.error(e);
       setPlaylistSelectError('Falha ao carregar playlists.');
@@ -260,7 +270,8 @@
       state.total = null;
       state.startIndex = 0;
       state.sortedItems = null;
-      el('ppTbody').innerHTML = '';
+      const tbody = el('ppTbody');
+      if (tbody) tbody.innerHTML = '';
       setProgress(0);
     }
 
@@ -315,6 +326,10 @@
 
   function renderRows() {
     const tbody = el('ppTbody');
+    if (!tbody) {
+      setStatus('Tabela não encontrada. Recarregue a página.');
+      return;
+    }
     const rows = [];
 
     const base = state.sortedItems || state.items;
@@ -361,6 +376,7 @@
 
   function getSelectedPositions() {
     const tbody = el('ppTbody');
+    if (!tbody) return [];
     const trs = Array.from(tbody.querySelectorAll('tr'));
     const selected = [];
     trs.forEach((tr, pos) => {

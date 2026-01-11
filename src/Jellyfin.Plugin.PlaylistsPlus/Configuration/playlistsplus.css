@@ -32,7 +32,23 @@
 .pp-table thead th{ position:sticky; top:0; background:rgba(0,0,0,0.25); z-index:2; }
 
 .pp-muted{ opacity:.7; font-size: 0.92em; }
-.pp-name{ font-weight:600; }
-.pp-actions-inline{ display:flex; gap:8px; }
+.pp-name{ font-weight:600; line-height:1.25; }
+.pp-actions-inline{ display:flex; gap:6px; align-items:center; }
+.pp-action-btn{
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.2);
+  color: #f1f1f1;
+  border-radius: 6px;
+  padding: 6px 10px;
+  min-width: 34px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.pp-action-btn:hover{ background: rgba(255,255,255,0.14); }
+.pp-action-btn:disabled{ opacity: 0.5; cursor: not-allowed; }
+.pp-action-btn--move{
+  min-width: 78px;
+  font-weight: 500;
+}
 
 .pp-footer{ margin: 12px 0 8px; display:flex; justify-content:center; }

@@ -67,9 +67,65 @@
       playlistItemId: dto.PlaylistItemId || dto.PlaylistItemID, // be defensive
       name: dto.Name || '(sem nome)',
       type: dto.Type || '',
+      seriesName: dto.SeriesName || null,
+      seasonNumber: dto.ParentIndexNumber ?? null,
+      episodeNumber: dto.IndexNumber ?? null,
+      episodeNumberEnd: dto.IndexNumberEnd ?? null,
       premiere: dto.PremiereDate || null,
       year: dto.ProductionYear || null
     };
+  }
+
+  function pad2(value) {
+    return String(value).padStart(2, '0');
+  }
+
+  function formatEpisodeCode(item) {
+    const season = item.seasonNumber;
+    const episode = item.episodeNumber;
+    const episodeEnd = item.episodeNumberEnd;
+
+    let code = '';
+    if (season != null && episode != null) {
+      code = `S${pad2(season)}E${pad2(episode)}`;
+    } else if (episode != null) {
+      code = `E${pad2(episode)}`;
+    } else if (season != null) {
+      code = `S${pad2(season)}`;
+    }
+
+    if (code && episodeEnd != null && episodeEnd !== episode) {
+      code += `-E${pad2(episodeEnd)}`;
+    }
+
+    return code;
+  }
+
+  function getDisplayTitle(item) {
+    if (item.type === 'Episode') {
+      const parts = [];
+      if (item.seriesName) parts.push(item.seriesName);
+      const code = formatEpisodeCode(item);
+      if (code) parts.push(code);
+      if (item.name) parts.push(item.name);
+      return parts.join(' — ') || '(sem nome)';
+    }
+    return item.name || '(sem nome)';
+  }
+
+  function formatTypeLabel(type) {
+    switch (type) {
+      case 'Episode':
+        return 'Episódio';
+      case 'Movie':
+        return 'Filme';
+      case 'Series':
+        return 'Série';
+      case 'Season':
+        return 'Temporada';
+      default:
+        return type || '';
+    }
   }
 
   async function jfGet(url) {
@@ -343,22 +399,24 @@
       const it = list[i];
       const premiere = fmtDate(it.premiere);
       const year = it.year ?? '';
+      const title = getDisplayTitle(it);
+      const typeLabel = formatTypeLabel(it.type);
+      const titleAttr = it.itemId ? ` title="${escapeHtml(it.itemId)}"` : '';
       rows.push(`
         <tr data-pos="${i}" data-playlistitemid="${it.playlistItemId || ''}">
           <td><input class="ppSel" type="checkbox" /></td>
           <td class="pp-muted">${i}</td>
           <td>
-            <div class="pp-name">${escapeHtml(it.name)}</div>
-            <div class="pp-muted">${escapeHtml(it.itemId || '')}</div>
+            <div class="pp-name"${titleAttr}>${escapeHtml(title)}</div>
           </td>
-          <td class="pp-muted">${escapeHtml(it.type || '')}</td>
+          <td class="pp-muted">${escapeHtml(typeLabel)}</td>
           <td class="pp-muted">${escapeHtml(premiere)}</td>
           <td class="pp-muted">${escapeHtml(String(year))}</td>
           <td>
             <div class="pp-actions-inline">
-              <button class="ppUp" is="emby-button" type="button">↑</button>
-              <button class="ppDown" is="emby-button" type="button">↓</button>
-              <button class="ppMove" is="emby-button" type="button">Mover…</button>
+              <button class="pp-action-btn ppUp" type="button">↑</button>
+              <button class="pp-action-btn ppDown" type="button">↓</button>
+              <button class="pp-action-btn pp-action-btn--move ppMove" type="button">Mover…</button>
             </div>
           </td>
         </tr>

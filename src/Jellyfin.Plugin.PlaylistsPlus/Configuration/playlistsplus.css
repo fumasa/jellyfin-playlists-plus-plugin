@@ -1,0 +1,36 @@
+.pp-card{
+  border:1px solid rgba(255,255,255,0.08);
+  border-radius:12px;
+  padding:16px;
+  margin: 12px 0 18px;
+}
+
+.pp-row{
+  display:flex;
+  gap:12px;
+  flex-wrap:wrap;
+  align-items:flex-end;
+  margin-bottom:12px;
+}
+
+.pp-col{ flex: 1 1 240px; }
+.pp-col-small{ flex: 0 1 140px; }
+
+.pp-actions{ align-items:center; }
+.pp-group{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+.pp-label{ opacity:.85; margin-right:4px; }
+
+.pp-status{ width:100%; }
+.pp-progress{ height:8px; background:rgba(255,255,255,0.08); border-radius:8px; overflow:hidden; }
+.pp-progressbar{ height:8px; width:0%; background:rgba(255,255,255,0.35); }
+
+.pp-tablewrap{ overflow:auto; border-radius:12px; border:1px solid rgba(255,255,255,0.08); }
+.pp-table{ width:100%; border-collapse:collapse; }
+.pp-table th,.pp-table td{ padding:10px 12px; border-bottom:1px solid rgba(255,255,255,0.06); vertical-align:middle; }
+.pp-table thead th{ position:sticky; top:0; background:rgba(0,0,0,0.25); z-index:2; }
+
+.pp-muted{ opacity:.7; font-size: 0.92em; }
+.pp-name{ font-weight:600; }
+.pp-actions-inline{ display:flex; gap:8px; }
+
+.pp-footer{ margin: 12px 0 8px; display:flex; justify-content:center; }

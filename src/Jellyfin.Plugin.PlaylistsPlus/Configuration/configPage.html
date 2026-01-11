@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Playlists Plus</title>
+  <link rel="stylesheet" type="text/css" href="PlaylistsPlus/playlistsplus.css" />
+</head>
+
+<body>
+<div id="PlaylistsPlusPage"
+     data-role="page"
+     class="page type-interior pluginConfigurationPage"
+     data-require="scripts/site,emby-input,emby-button,emby-checkbox,emby-select,emby-textarea">
+
+  <div data-role="content">
+    <div class="content-primary">
+      <h1>Playlists Plus</h1>
+
+      <div class="pp-card">
+        <div class="pp-row">
+          <div class="pp-col">
+            <label class="inputLabel" for="ppPlaylistId">Playlist ID</label>
+            <input id="ppPlaylistId" type="text" is="emby-input" placeholder="ex: 1a2b3c4d5e..." />
+          </div>
+          <div class="pp-col">
+            <label class="inputLabel" for="ppPageSize">Page size (limit)</label>
+            <input id="ppPageSize" type="number" is="emby-input" min="25" max="1000" value="200" />
+          </div>
+          <div class="pp-col pp-col-small">
+            <label class="inputLabel" for="ppMoveThrottle">Throttle (ms)</label>
+            <input id="ppMoveThrottle" type="number" is="emby-input" min="0" max="1000" value="30" />
+          </div>
+        </div>
+
+        <div class="pp-row pp-actions">
+          <button id="ppLoad" is="emby-button" type="button" class="raised button-submit">Carregar</button>
+          <button id="ppReloadAll" is="emby-button" type="button" class="raised">Recarregar tudo</button>
+          <label class="checkboxContainer">
+            <input id="ppAutoLoadAll" type="checkbox" is="emby-checkbox" checked />
+            <span>Infinite scroll até carregar tudo</span>
+          </label>
+        </div>
+
+        <div class="pp-row pp-actions">
+          <div class="pp-group">
+            <span class="pp-label">Ordenar por:</span>
+            <button id="ppSortPremiere" is="emby-button" type="button" class="raised">Lançamento</button>
+            <button id="ppSortYear" is="emby-button" type="button" class="raised">Ano</button>
+            <button id="ppSortName" is="emby-button" type="button" class="raised">Nome</button>
+            <label class="checkboxContainer">
+              <input id="ppSortAsc" type="checkbox" is="emby-checkbox" />
+              <span>Ascendente</span>
+            </label>
+          </div>
+          <div class="pp-group">
+            <button id="ppApplyOrder" is="emby-button" type="button" class="raised button-submit">Aplicar ordenação</button>
+          </div>
+        </div>
+
+        <div class="pp-row pp-actions">
+          <div class="pp-group">
+            <span class="pp-label">Seleção:</span>
+            <button id="ppSelectAll" is="emby-button" type="button" class="raised">Tudo</button>
+            <button id="ppSelectNone" is="emby-button" type="button" class="raised">Nada</button>
+          </div>
+          <div class="pp-group">
+            <span class="pp-label">Mover selecionados para:</span>
+            <button id="ppMoveTop" is="emby-button" type="button" class="raised">Topo</button>
+            <button id="ppMoveBottom" is="emby-button" type="button" class="raised">Fundo</button>
+            <button id="ppMoveIndex" is="emby-button" type="button" class="raised">Índice…</button>
+          </div>
+        </div>
+
+        <div class="pp-row">
+          <div class="pp-status">
+            <div id="ppStatusLine">Pronto.</div>
+            <div class="pp-progress">
+              <div id="ppProgressBar" class="pp-progressbar"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pp-tablewrap">
+        <table class="pp-table">
+          <thead>
+            <tr>
+              <th style="width:44px;"></th>
+              <th style="width:70px;">Pos</th>
+              <th>Item</th>
+              <th style="width:140px;">Tipo</th>
+              <th style="width:160px;">Lançamento</th>
+              <th style="width:90px;">Ano</th>
+              <th style="width:170px;">Ações</th>
+            </tr>
+          </thead>
+          <tbody id="ppTbody"></tbody>
+        </table>
+      </div>
+
+      <div class="pp-footer">
+        <button id="ppLoadMore" is="emby-button" type="button" class="raised">Carregar mais</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="PlaylistsPlus/playlistsplus.js"></script>
+</div>
+</body>
+</html>

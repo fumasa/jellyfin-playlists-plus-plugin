@@ -8,6 +8,14 @@
     "category": "General",
     "versions": [
       {
+        "version": "0.1.6.0",
+        "changelog": "https://github.com/fumasa/jellyfin-playlists-plus-plugin/releases/tag/v0.1.6",
+        "targetAbi": "10.10.3.0",
+        "sourceUrl": "https://github.com/fumasa/jellyfin-playlists-plus-plugin/releases/download/v0.1.6/Jellyfin.Plugin.PlaylistsPlus_v0.1.6.zip",
+        "checksum": "6B601DC63C5BF26755A84925493BB5AA",
+        "timestamp": "2026-01-11"
+      },
+      {
         "version": "0.1.5.0",
         "changelog": "https://github.com/fumasa/jellyfin-playlists-plus-plugin/releases/tag/v0.1.5",
         "targetAbi": "10.10.3.0",

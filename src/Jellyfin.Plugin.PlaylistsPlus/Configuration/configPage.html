@@ -82,10 +82,6 @@
           <div class="pp-group">
             <span class="pp-label">Exportar/Importar:</span>
             <button id="ppExport" is="emby-button" type="button" class="raised">Exportar</button>
-            <label class="checkboxContainer">
-              <input id="ppExportMeta" type="checkbox" is="emby-checkbox" />
-              <span>Incluir metadados</span>
-            </label>
             <button id="ppImport" is="emby-button" type="button" class="raised">Importar</button>
             <input id="ppImportFile" type="file" accept="application/json,.json" hidden />
           </div>
@@ -110,34 +106,6 @@
               <input id="ppImportDryRun" type="checkbox" is="emby-checkbox" />
               <span>Simular (dry-run)</span>
             </label>
-          </div>
-          <div class="pp-group">
-            <label class="checkboxContainer">
-              <input id="ppImportApplyMetadata" type="checkbox" is="emby-checkbox" />
-              <span>Aplicar metadados</span>
-            </label>
-            <div id="ppImportMetaFields" class="pp-meta-fields" hidden>
-              <label class="checkboxContainer">
-                <input id="ppMetaTagline" type="checkbox" is="emby-checkbox" checked />
-                <span>Tagline</span>
-              </label>
-              <label class="checkboxContainer">
-                <input id="ppMetaTags" type="checkbox" is="emby-checkbox" checked />
-                <span>Tags</span>
-              </label>
-              <label class="checkboxContainer">
-                <input id="ppMetaSortName" type="checkbox" is="emby-checkbox" checked />
-                <span>Sort name</span>
-              </label>
-              <label class="checkboxContainer">
-                <input id="ppMetaPremiere" type="checkbox" is="emby-checkbox" />
-                <span>Lançamento</span>
-              </label>
-              <label class="checkboxContainer">
-                <input id="ppMetaYear" type="checkbox" is="emby-checkbox" />
-                <span>Ano</span>
-              </label>
-            </div>
           </div>
         </div>
 

@@ -12,7 +12,7 @@
         "changelog": "https://github.com/fumasa/jellyfin-playlists-plus-plugin/releases/tag/v0.1.9",
         "targetAbi": "10.10.3.0",
         "sourceUrl": "https://github.com/fumasa/jellyfin-playlists-plus-plugin/releases/download/v0.1.9/Jellyfin.Plugin.PlaylistsPlus_v0.1.9.zip",
-        "checksum": "3863B8A5504D50FB4279589CED861B48",
+        "checksum": "D39E93B7B1428D0714B224F1F6AF7014",
         "timestamp": "2026-01-12"
       },
       {

@@ -25,6 +25,12 @@
 .pp-meta-fields{ display:flex; gap:10px; flex-wrap:wrap; }
 
 .pp-status{ width:100%; }
+.pp-preview{
+  margin-top:6px;
+  font-size:0.92em;
+  opacity:0.85;
+}
+.pp-preview-line{ margin-top:2px; }
 .pp-progress{ height:8px; background:rgba(255,255,255,0.08); border-radius:8px; overflow:hidden; }
 .pp-progressbar{ height:8px; width:0%; background:rgba(255,255,255,0.35); }
 
@@ -35,6 +41,22 @@
 
 .pp-muted{ opacity:.7; font-size: 0.92em; }
 .pp-name{ font-weight:600; line-height:1.25; }
+.pp-meta{
+  margin-top:4px;
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+  font-size:0.78em;
+  opacity:0.8;
+}
+.pp-meta-line{ cursor:pointer; }
+.pp-meta-line:hover{ opacity:1; text-decoration:underline; }
+.pp-meta-value{ opacity:0.9; }
+.pp-meta-pending{ color:#ffd166; opacity:1; }
+.pp-editable{ cursor:pointer; }
+.pp-editable:hover{ color:#f1f1f1; text-decoration:underline; }
+.pp-pos-new{ font-weight:600; }
+.pp-pos-change{ color:#ffd166; }
 .pp-actions-inline{ display:flex; gap:6px; align-items:center; }
 .pp-action-btn{
   background: rgba(255,255,255,0.08);

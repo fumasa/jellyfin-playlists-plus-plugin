@@ -17,7 +17,9 @@
     limit: 200,
     throttleMs: 30,
     autoLoadAll: true,
-    sortedItems: null
+    sortedItems: null,
+    metaEdits: new Map(),
+    pendingImport: null
   };
   let uiBound = false;
 
@@ -30,6 +32,89 @@
     const bar = el('ppProgressBar');
     if (!bar) return;
     bar.style.width = `${Math.max(0, Math.min(100, pct))}%`;
+  }
+
+  function setPreviewLines(lines) {
+    const preview = el('ppPreview');
+    if (!preview) return;
+    if (!lines || !lines.length) {
+      preview.hidden = true;
+      preview.innerHTML = '';
+      return;
+    }
+    preview.hidden = false;
+    preview.innerHTML = lines.map(line => `<div class="pp-preview-line">${escapeHtml(line)}</div>`).join('');
+  }
+
+  function getOrderChangeCount() {
+    if (!state.sortedItems) return 0;
+    const current = new Map();
+    state.items.forEach((item, idx) => {
+      if (item?.playlistItemId) current.set(item.playlistItemId, idx);
+    });
+    let changes = 0;
+    state.sortedItems.forEach((item, idx) => {
+      const cur = current.get(item.playlistItemId);
+      if (cur !== idx) changes += 1;
+    });
+    return changes;
+  }
+
+  function getMetaEditSummary() {
+    const summary = {
+      items: 0,
+      tags: 0,
+      taglines: 0,
+      sortName: 0,
+      premiereDate: 0,
+      productionYear: 0
+    };
+
+    state.metaEdits.forEach(edit => {
+      summary.items += 1;
+      if (edit.hasTags) summary.tags += 1;
+      if (edit.hasTaglines) summary.taglines += 1;
+      if (edit.hasSortName) summary.sortName += 1;
+      if (edit.hasPremiereDate) summary.premiereDate += 1;
+      if (edit.hasProductionYear) summary.productionYear += 1;
+    });
+
+    return summary;
+  }
+
+  function updatePreview() {
+    const lines = [];
+    const orderChanges = getOrderChangeCount();
+    if (orderChanges) {
+      lines.push(`Ordenação pendente: ${orderChanges} itens mudam de posição.`);
+    }
+
+    const metaSummary = getMetaEditSummary();
+    if (metaSummary.items) {
+      const parts = [];
+      if (metaSummary.sortName) parts.push(`Sort name: ${metaSummary.sortName}`);
+      if (metaSummary.taglines) parts.push(`Tagline: ${metaSummary.taglines}`);
+      if (metaSummary.tags) parts.push(`Tags: ${metaSummary.tags}`);
+      if (metaSummary.premiereDate) parts.push(`Lançamento: ${metaSummary.premiereDate}`);
+      if (metaSummary.productionYear) parts.push(`Ano: ${metaSummary.productionYear}`);
+      lines.push(`Metadados pendentes: ${metaSummary.items} itens (${parts.join(', ')}).`);
+    }
+
+    if (state.pendingImport) {
+      const { missingIds, extraEntryIds } = state.pendingImport;
+      if (missingIds?.length) {
+        lines.push(`Importação pendente: adicionar ${missingIds.length} itens.`);
+      }
+      if (extraEntryIds?.length) {
+        lines.push(`Importação pendente: remover ${extraEntryIds.length} itens.`);
+      }
+    }
+
+    setPreviewLines(lines);
+    const saveBtn = el('ppSaveChanges');
+    if (saveBtn) {
+      saveBtn.disabled = !(orderChanges || metaSummary.items || (state.pendingImport && (state.pendingImport.missingIds?.length || state.pendingImport.extraEntryIds?.length)));
+    }
   }
 
   function requireGlobals() {
@@ -129,6 +214,171 @@
       default:
         return type || '';
     }
+  }
+
+  function normalizeText(value) {
+    return String(value || '').trim();
+  }
+
+  function normalizeTagList(list) {
+    return (list || [])
+      .map(v => String(v || '').trim())
+      .filter(Boolean)
+      .map(v => v.toLowerCase())
+      .sort();
+  }
+
+  function isSameTagList(a, b) {
+    const left = normalizeTagList(a);
+    const right = normalizeTagList(b);
+    if (left.length !== right.length) return false;
+    for (let i = 0; i < left.length; i++) {
+      if (left[i] !== right[i]) return false;
+    }
+    return true;
+  }
+
+  function normalizeDateInput(value) {
+    const raw = normalizeText(value);
+    if (!raw) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+    const parsed = new Date(raw);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return parsed.toISOString().slice(0, 10);
+  }
+
+  function toUpdateDate(value) {
+    if (!value) return null;
+    if (value.includes('T')) return value;
+    return `${value}T00:00:00.000Z`;
+  }
+
+  function getItemByItemId(itemId) {
+    return state.items.find(item => String(item.itemId) === String(itemId)) || null;
+  }
+
+  function getBaseMeta(item) {
+    return {
+      tags: Array.isArray(item.tags) ? item.tags : [],
+      taglines: Array.isArray(item.taglines) ? item.taglines : [],
+      sortName: item.sortName || '',
+      premiere: item.premiere || null,
+      year: item.year ?? null
+    };
+  }
+
+  function getMetaPendingFlags(item) {
+    const edit = state.metaEdits.get(String(item.itemId));
+    return {
+      tags: !!edit?.hasTags,
+      taglines: !!edit?.hasTaglines,
+      sortName: !!edit?.hasSortName,
+      premiereDate: !!edit?.hasPremiereDate,
+      productionYear: !!edit?.hasProductionYear
+    };
+  }
+
+  function getEffectiveMeta(item) {
+    const base = getBaseMeta(item);
+    const edit = state.metaEdits.get(String(item.itemId));
+    if (!edit) return base;
+
+    return {
+      tags: edit.hasTags ? (edit.tags || []) : base.tags,
+      taglines: edit.hasTaglines ? (edit.taglines || []) : base.taglines,
+      sortName: edit.hasSortName ? (edit.sortName || '') : base.sortName,
+      premiere: edit.hasPremiereDate ? edit.premiereDate : base.premiere,
+      year: edit.hasProductionYear ? edit.productionYear : base.year
+    };
+  }
+
+  function applyMetaEdit(itemId, field, value) {
+    const item = getItemByItemId(itemId);
+    if (!item) return;
+
+    const base = getBaseMeta(item);
+    const edit = state.metaEdits.get(String(itemId)) || {
+      hasTags: false,
+      hasTaglines: false,
+      hasSortName: false,
+      hasPremiereDate: false,
+      hasProductionYear: false
+    };
+
+    if (field === 'tags') {
+      const tags = parseStringList(value);
+      const changed = !isSameTagList(tags, base.tags);
+      edit.hasTags = changed;
+      edit.tags = tags;
+    } else if (field === 'tagline') {
+      const tagline = normalizeText(value);
+      const changed = normalizeText(base.taglines?.[0] || '') !== tagline;
+      edit.hasTaglines = changed;
+      edit.taglines = tagline ? [tagline] : [];
+    } else if (field === 'sortName') {
+      const sortName = normalizeText(value);
+      const changed = normalizeText(base.sortName || '') !== sortName;
+      edit.hasSortName = changed;
+      edit.sortName = sortName;
+    } else if (field === 'premiereDate') {
+      const date = normalizeDateInput(value);
+      const changed = normalizeDateInput(fmtDate(base.premiere)) !== date;
+      edit.hasPremiereDate = changed;
+      edit.premiereDate = date ? toUpdateDate(date) : null;
+    } else if (field === 'productionYear') {
+      const year = value === '' || value == null ? null : Number(value);
+      const normalized = Number.isFinite(year) ? year : null;
+      const changed = (base.year ?? null) !== normalized;
+      edit.hasProductionYear = changed;
+      edit.productionYear = normalized;
+    }
+
+    if (!(edit.hasTags || edit.hasTaglines || edit.hasSortName || edit.hasPremiereDate || edit.hasProductionYear)) {
+      state.metaEdits.delete(String(itemId));
+    } else {
+      state.metaEdits.set(String(itemId), edit);
+    }
+
+    renderRows();
+    updatePreview();
+  }
+
+  function promptMetaEdit(itemId, field) {
+    const item = getItemByItemId(itemId);
+    if (!item) return;
+    const meta = getEffectiveMeta(item);
+
+    let label = 'Valor';
+    let defaultValue = '';
+
+    switch (field) {
+      case 'sortName':
+        label = 'Sort name (vazio remove)';
+        defaultValue = meta.sortName || '';
+        break;
+      case 'tagline':
+        label = 'Tagline (vazio remove)';
+        defaultValue = meta.taglines?.[0] || '';
+        break;
+      case 'tags':
+        label = 'Tags (separe por vírgula; vazio remove)';
+        defaultValue = (meta.tags || []).join(', ');
+        break;
+      case 'premiereDate':
+        label = 'Lançamento (YYYY-MM-DD; vazio remove)';
+        defaultValue = meta.premiere ? fmtDate(meta.premiere) : '';
+        break;
+      case 'productionYear':
+        label = 'Ano (YYYY; vazio remove)';
+        defaultValue = meta.year ?? '';
+        break;
+      default:
+        return;
+    }
+
+    const raw = prompt(label, String(defaultValue));
+    if (raw == null) return;
+    applyMetaEdit(itemId, field, raw);
   }
 
   async function jfGet(url) {
@@ -241,7 +491,10 @@
 
     const previousAuto = state.autoLoadAll;
     state.autoLoadAll = true;
-    await loadPage(true);
+    if (state.sortedItems) {
+      state.sortedItems = null;
+    }
+    await loadPage(state.items.length === 0);
     state.autoLoadAll = previousAuto;
 
     if (!state.total || state.items.length < state.total) {
@@ -289,6 +542,7 @@
       playlistName: playlistName || null,
       exportedAt: new Date().toISOString(),
       items: state.items.map(item => {
+        const meta = getEffectiveMeta(item);
         const base = {
           itemId: item.itemId,
           name: item.name,
@@ -297,14 +551,14 @@
           seasonNumber: item.seasonNumber,
           episodeNumber: item.episodeNumber,
           episodeNumberEnd: item.episodeNumberEnd,
-          premiereDate: item.premiere,
-          productionYear: item.year
+          premiereDate: meta.premiere,
+          productionYear: meta.year
         };
 
         if (includeMeta) {
-          base.sortName = item.sortName;
-          base.tags = item.tags;
-          base.taglines = item.taglines;
+          base.sortName = meta.sortName || '';
+          base.tags = meta.tags || [];
+          base.tagline = meta.taglines?.[0] || '';
         }
 
         return base;
@@ -321,6 +575,7 @@
       reorder: !!el('ppImportReorder')?.checked,
       addMissing: !!el('ppImportAddMissing')?.checked,
       removeExtra: !!el('ppImportRemoveExtra')?.checked,
+      dryRun: !!el('ppImportDryRun')?.checked,
       applyMetadata: !!el('ppImportApplyMetadata')?.checked,
       metaTagline: !!el('ppMetaTagline')?.checked,
       metaTags: !!el('ppMetaTags')?.checked,
@@ -396,7 +651,7 @@
     return parseMaybeJson(data);
   }
 
-  function buildUpdatePayload(item, meta, options) {
+  function buildUpdatePayload(item, meta) {
     const payload = {
       Id: item.Id,
       Name: item.Name,
@@ -439,29 +694,55 @@
       Taglines: item.Taglines || []
     };
 
-    if (options.metaSortName && meta.hasSortName) {
+    if (meta.hasSortName) {
       payload.ForcedSortName = meta.sortName || '';
     }
-    if (options.metaTags && meta.hasTags) {
+    if (meta.hasTags) {
       payload.Tags = meta.tags || [];
     }
-    if (options.metaTagline && meta.hasTaglines) {
+    if (meta.hasTaglines) {
       payload.Taglines = meta.taglines || [];
     }
-    if (options.metaPremiere && meta.hasPremiereDate) {
+    if (meta.hasPremiereDate) {
       payload.PremiereDate = meta.premiereDate || null;
     }
-    if (options.metaYear && meta.hasProductionYear) {
+    if (meta.hasProductionYear) {
       payload.ProductionYear = meta.productionYear || null;
     }
 
     return payload;
   }
 
+  function applyMetaToLocalItem(itemId, meta) {
+    const item = getItemByItemId(itemId);
+    if (!item) return;
+    if (meta.hasSortName) item.sortName = meta.sortName || '';
+    if (meta.hasTags) item.tags = meta.tags || [];
+    if (meta.hasTaglines) item.taglines = meta.taglines || [];
+    if (meta.hasPremiereDate) item.premiere = meta.premiereDate || null;
+    if (meta.hasProductionYear) item.year = meta.productionYear ?? null;
+  }
+
   async function applyMetadataUpdates(importItems, options) {
     const metaMap = new Map();
     importItems.forEach(item => {
-      metaMap.set(item.itemId, item);
+      const meta = {
+        itemId: item.itemId,
+        hasSortName: options.metaSortName && item.hasSortName,
+        sortName: item.sortName,
+        hasTags: options.metaTags && item.hasTags,
+        tags: item.tags,
+        hasTaglines: options.metaTagline && item.hasTaglines,
+        taglines: item.taglines,
+        hasPremiereDate: options.metaPremiere && item.hasPremiereDate,
+        premiereDate: item.premiereDate,
+        hasProductionYear: options.metaYear && item.hasProductionYear,
+        productionYear: item.productionYear
+      };
+
+      if (meta.hasSortName || meta.hasTags || meta.hasTaglines || meta.hasPremiereDate || meta.hasProductionYear) {
+        metaMap.set(item.itemId, meta);
+      }
     });
 
     const itemsToUpdate = state.items.filter(item => metaMap.has(item.itemId));
@@ -479,7 +760,7 @@
 
       try {
         const item = await fetchItemForUpdate(entry.itemId);
-        const payload = buildUpdatePayload(item, meta, options);
+        const payload = buildUpdatePayload(item, meta);
         if (window.ApiClient?.updateItem) {
           await window.ApiClient.updateItem(payload);
         } else {
@@ -490,6 +771,7 @@
             contentType: 'application/json'
           });
         }
+        applyMetaToLocalItem(entry.itemId, meta);
       } catch (e) {
         console.error(e);
         setStatus(`Erro ao atualizar metadados de ${entry.itemId}`);
@@ -503,6 +785,85 @@
     }
 
     setStatus('Metadados aplicados.');
+    renderRows();
+    updatePreview();
+  }
+
+  async function applyPendingMetadataEdits() {
+    const entries = Array.from(state.metaEdits.entries());
+    if (!entries.length) return;
+
+    setStatus(`Aplicando metadados em ${entries.length} itens...`);
+    setProgress(0);
+
+    for (let i = 0; i < entries.length; i++) {
+      const [itemId, meta] = entries[i];
+      try {
+        const item = await fetchItemForUpdate(itemId);
+        const payload = buildUpdatePayload(item, meta);
+        if (window.ApiClient?.updateItem) {
+          await window.ApiClient.updateItem(payload);
+        } else {
+          await window.ApiClient.ajax({
+            type: 'POST',
+            url: window.ApiClient.getUrl(`Items/${encodeURIComponent(itemId)}`),
+            data: JSON.stringify(payload),
+            contentType: 'application/json'
+          });
+        }
+        applyMetaToLocalItem(itemId, meta);
+      } catch (e) {
+        console.error(e);
+        setStatus(`Erro ao atualizar metadados de ${itemId}`);
+      }
+
+      const pct = Math.round(((i + 1) / entries.length) * 100);
+      setProgress(pct);
+      if (state.throttleMs) {
+        await new Promise(r => setTimeout(r, state.throttleMs));
+      }
+    }
+
+    setStatus('Metadados aplicados.');
+    renderRows();
+    updatePreview();
+  }
+
+  function mergeImportMetaEdits(importItems, options) {
+    importItems.forEach(item => {
+      const edit = state.metaEdits.get(String(item.itemId)) || {
+        hasTags: false,
+        hasTaglines: false,
+        hasSortName: false,
+        hasPremiereDate: false,
+        hasProductionYear: false
+      };
+
+      if (options.metaSortName && item.hasSortName) {
+        edit.hasSortName = true;
+        edit.sortName = item.sortName || '';
+      }
+      if (options.metaTags && item.hasTags) {
+        edit.hasTags = true;
+        edit.tags = item.tags || [];
+      }
+      if (options.metaTagline && item.hasTaglines) {
+        edit.hasTaglines = true;
+        edit.taglines = item.taglines || [];
+      }
+      if (options.metaPremiere && item.hasPremiereDate) {
+        edit.hasPremiereDate = true;
+        edit.premiereDate = item.premiereDate || null;
+      }
+      if (options.metaYear && item.hasProductionYear) {
+        edit.hasProductionYear = true;
+        edit.productionYear = item.productionYear ?? null;
+      }
+
+      if (edit.hasTags || edit.hasTaglines || edit.hasSortName || edit.hasPremiereDate || edit.hasProductionYear) {
+        state.metaEdits.set(String(item.itemId), edit);
+      }
+    });
   }
 
   async function importPlaylist(payload) {
@@ -518,6 +879,37 @@
 
     const importIds = importItems.map(item => item.itemId);
     const currentIds = new Set(state.items.map(item => item.itemId));
+
+    if (options.dryRun) {
+      const missingIds = options.addMissing ? importIds.filter(id => !currentIds.has(id)) : [];
+      const importIdSet = new Set(importIds);
+      const extraEntryIds = options.removeExtra
+        ? state.items
+            .filter(item => !importIdSet.has(item.itemId) && item.playlistItemId)
+            .map(item => item.playlistItemId)
+        : [];
+
+      state.pendingImport = {
+        missingIds,
+        extraEntryIds,
+        importIds,
+        options
+      };
+
+      if (options.reorder) {
+        state.sortedItems = buildTargetOrder(state.items, importIds, options.removeExtra);
+      } else {
+        state.sortedItems = null;
+      }
+
+      if (options.applyMetadata && (options.metaTags || options.metaTagline || options.metaSortName || options.metaPremiere || options.metaYear)) {
+        mergeImportMetaEdits(importItems, options);
+      }
+
+      renderRows();
+      setStatus('Simulação pronta. Revise e clique em "Salvar alterações" para aplicar.');
+      return;
+    }
 
     if (options.addMissing) {
       const missing = importIds.filter(id => !currentIds.has(id));
@@ -549,7 +941,20 @@
       await applyMetadataUpdates(importItems, options);
     }
 
+    state.pendingImport = null;
+    state.metaEdits.clear();
+    updatePreview();
     setStatus('Importação concluída.');
+  }
+
+  async function reloadItemsPreserveEdits() {
+    const savedEdits = new Map(state.metaEdits);
+    const savedPending = state.pendingImport;
+    await loadPage(true);
+    state.metaEdits = savedEdits;
+    state.pendingImport = savedPending;
+    renderRows();
+    updatePreview();
   }
 
   function getSelectedPlaylistId() {
@@ -736,9 +1141,12 @@
       state.total = null;
       state.startIndex = 0;
       state.sortedItems = null;
+      state.metaEdits.clear();
+      state.pendingImport = null;
       const tbody = el('ppTbody');
       if (tbody) tbody.innerHTML = '';
       setProgress(0);
+      updatePreview();
     }
 
     const fields = [
@@ -802,24 +1210,44 @@
 
     const base = state.sortedItems || state.items;
     const list = base.slice();
+    const currentIndex = new Map();
+    state.items.forEach((item, idx) => {
+      if (item?.playlistItemId) currentIndex.set(item.playlistItemId, idx);
+    });
+    const hasPreview = !!state.sortedItems;
 
     for (let i = 0; i < list.length; i++) {
       const it = list[i];
-      const premiere = fmtDate(it.premiere);
-      const year = it.year ?? '';
+      const currentPos = currentIndex.get(it.playlistItemId) ?? i;
+      const newPos = hasPreview ? i : currentPos;
+      const posChanged = hasPreview && currentPos !== newPos;
       const title = getDisplayTitle(it);
       const typeLabel = formatTypeLabel(it.type);
       const titleAttr = it.itemId ? ` title="${escapeHtml(it.itemId)}"` : '';
+      const meta = getEffectiveMeta(it);
+      const pending = getMetaPendingFlags(it);
+      const effectivePremiere = fmtDate(meta.premiere);
+      const effectiveYear = meta.year ?? '';
+      const premiereClass = pending.premiereDate ? ' pp-meta-pending' : '';
+      const yearClass = pending.productionYear ? ' pp-meta-pending' : '';
+      const posClass = posChanged ? ' pp-pos-change' : '';
+      const metaLines = [
+        renderMetaLine('sortName', 'Sort', meta.sortName || '', pending.sortName, it.itemId),
+        renderMetaLine('tagline', 'Tagline', meta.taglines?.[0] || '', pending.taglines, it.itemId),
+        renderMetaLine('tags', 'Tags', (meta.tags || []).join(', '), pending.tags, it.itemId)
+      ].join('');
       rows.push(`
-        <tr data-pos="${i}" data-playlistitemid="${it.playlistItemId || ''}">
+        <tr data-pos="${i}" data-playlistitemid="${it.playlistItemId || ''}" data-itemid="${escapeHtml(it.itemId || '')}">
           <td><input class="ppSel" type="checkbox" /></td>
-          <td class="pp-muted">${i}</td>
+          <td class="pp-muted">${currentPos}</td>
+          <td class="pp-muted pp-pos-new${posClass}">${newPos}</td>
           <td>
             <div class="pp-name"${titleAttr}>${escapeHtml(title)}</div>
+            <div class="pp-meta">${metaLines}</div>
           </td>
           <td class="pp-muted">${escapeHtml(typeLabel)}</td>
-          <td class="pp-muted">${escapeHtml(premiere)}</td>
-          <td class="pp-muted">${escapeHtml(String(year))}</td>
+          <td class="pp-muted pp-editable${premiereClass}" data-field="premiereDate" data-itemid="${escapeHtml(it.itemId || '')}">${escapeHtml(effectivePremiere)}</td>
+          <td class="pp-muted pp-editable${yearClass}" data-field="productionYear" data-itemid="${escapeHtml(it.itemId || '')}">${escapeHtml(String(effectiveYear))}</td>
           <td>
             <div class="pp-actions-inline">
               <button class="pp-action-btn ppUp" type="button">↑</button>
@@ -833,6 +1261,13 @@
 
     tbody.innerHTML = rows.join('');
     wireRowActions();
+    updatePreview();
+  }
+
+  function renderMetaLine(field, label, value, isPending, itemId) {
+    const display = value ? escapeHtml(value) : '—';
+    const pendingClass = isPending ? ' pp-meta-pending' : '';
+    return `<div class="pp-meta-line${pendingClass}" data-field="${field}" data-itemid="${escapeHtml(itemId || '')}" title="Clique para editar">${escapeHtml(label)}: <span class="pp-meta-value">${display}</span></div>`;
   }
 
   function escapeHtml(s) {
@@ -908,6 +1343,7 @@
 
     renderRows();
     setStatus('Ordenação aplicada.');
+    updatePreview();
   }
 
   function sortBy(selector) {
@@ -929,14 +1365,68 @@
     });
 
     state.sortedItems = clone;
+    state.pendingImport = null;
     renderRows();
-    setStatus('Prévia de ordenação pronta. Clique em "Aplicar ordenação" para efetivar.');
+    setStatus('Prévia de ordenação pronta. Clique em "Salvar alterações" para efetivar.');
   }
 
   function ensureMovesAllowed() {
     if (!state.sortedItems) return true;
-    setStatus('Prévia de ordenação ativa. Aplique ou recarregue antes de mover itens.');
+    setStatus('Prévia de ordenação ativa. Salve ou recarregue antes de mover itens.');
     return false;
+  }
+
+  async function saveChanges() {
+    if (!state.playlistId) {
+      setStatus('Selecione uma playlist.');
+      return;
+    }
+
+    const hasOrder = !!state.sortedItems;
+    const hasMeta = state.metaEdits.size > 0;
+    const hasImport = !!state.pendingImport;
+
+    if (!(hasOrder || hasMeta || hasImport)) {
+      setStatus('Nenhuma alteração pendente.');
+      return;
+    }
+
+    try {
+      if (state.pendingImport) {
+        const { missingIds, extraEntryIds, importIds, options } = state.pendingImport;
+        if (missingIds?.length) {
+          setStatus(`Adicionando ${missingIds.length} itens...`);
+          await addItemsToPlaylist(missingIds);
+        }
+        if (extraEntryIds?.length) {
+          setStatus(`Removendo ${extraEntryIds.length} itens...`);
+          await removeItemsFromPlaylist(extraEntryIds);
+        }
+        if ((missingIds && missingIds.length) || (extraEntryIds && extraEntryIds.length)) {
+          await reloadItemsPreserveEdits();
+        }
+        if (options?.reorder) {
+          const target = buildTargetOrder(state.items, importIds || [], options.removeExtra);
+          await applyTargetOrder(target);
+        }
+      } else if (state.sortedItems) {
+        await applyTargetOrder(state.sortedItems);
+      }
+
+      if (state.metaEdits.size) {
+        await applyPendingMetadataEdits();
+      }
+
+      state.sortedItems = null;
+      state.pendingImport = null;
+      state.metaEdits.clear();
+      renderRows();
+      updatePreview();
+      setStatus('Alterações salvas.');
+    } catch (e) {
+      console.error(e);
+      setStatus(`Erro ao salvar: ${e.message || e}`);
+    }
   }
 
   function wireRowActions() {
@@ -992,6 +1482,24 @@
           console.error(e);
           setStatus(`Erro ao mover: ${e.message || e}`);
         }
+      });
+    });
+
+    tbody.querySelectorAll('.pp-meta-line').forEach(line => {
+      line.addEventListener('click', () => {
+        const field = line.getAttribute('data-field');
+        const itemId = line.getAttribute('data-itemid');
+        if (!field || !itemId) return;
+        promptMetaEdit(itemId, field);
+      });
+    });
+
+    tbody.querySelectorAll('.pp-editable').forEach(cell => {
+      cell.addEventListener('click', () => {
+        const field = cell.getAttribute('data-field');
+        const itemId = cell.getAttribute('data-itemid');
+        if (!field || !itemId) return;
+        promptMetaEdit(itemId, field);
       });
     });
   }
@@ -1060,17 +1568,8 @@
     el('ppSortYear').addEventListener('click', () => sortBy(x => x.year ?? null));
     el('ppSortName').addEventListener('click', () => sortBy(x => (x.name || '').toLowerCase()));
 
-    el('ppApplyOrder').addEventListener('click', async () => {
-      if (!state.sortedItems) {
-        setStatus('Nenhuma prévia de ordenação ativa. Use um botão de "Ordenar por" primeiro.');
-        return;
-      }
-      try {
-        await applyTargetOrder(state.sortedItems);
-      } catch (e) {
-        console.error(e);
-        setStatus(`Erro ao aplicar ordenação: ${e.message || e}`);
-      }
+    el('ppSaveChanges').addEventListener('click', async () => {
+      await saveChanges();
     });
 
     el('ppSelectAll').addEventListener('click', () => {

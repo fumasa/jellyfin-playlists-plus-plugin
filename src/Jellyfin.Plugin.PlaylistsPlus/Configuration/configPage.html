@@ -60,7 +60,7 @@
             </label>
           </div>
           <div class="pp-group">
-            <button id="ppApplyOrder" is="emby-button" type="button" class="raised button-submit">Aplicar ordenação</button>
+            <button id="ppSaveChanges" is="emby-button" type="button" class="raised button-submit">Salvar alterações</button>
           </div>
         </div>
 
@@ -106,6 +106,10 @@
               <input id="ppImportRemoveExtra" type="checkbox" is="emby-checkbox" />
               <span>Remover extras</span>
             </label>
+            <label class="checkboxContainer">
+              <input id="ppImportDryRun" type="checkbox" is="emby-checkbox" />
+              <span>Simular (dry-run)</span>
+            </label>
           </div>
           <div class="pp-group">
             <label class="checkboxContainer">
@@ -140,6 +144,7 @@
         <div class="pp-row">
           <div class="pp-status">
             <div id="ppStatusLine">Pronto.</div>
+            <div id="ppPreview" class="pp-preview" hidden></div>
             <div class="pp-progress">
               <div id="ppProgressBar" class="pp-progressbar"></div>
             </div>
@@ -152,7 +157,8 @@
           <thead>
             <tr>
               <th style="width:44px;"></th>
-              <th style="width:70px;">Pos</th>
+              <th style="width:70px;">Atual</th>
+              <th style="width:70px;">Nova</th>
               <th>Item</th>
               <th style="width:140px;">Tipo</th>
               <th style="width:160px;">Lançamento</th>
